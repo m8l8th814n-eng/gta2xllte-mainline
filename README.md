@@ -13,10 +13,12 @@ Base: pmOS device profile `qcom-msm8953` (systemd-edge), kernel
 | eMMC (`mmcblk1`) | ✅ |
 | Userspace + ssh | ✅ |
 | Display | ✅ simpledrm on lk2nd's framebuffer |
-| Touch (ST FTS) | 🟡 chip responds, `stmfts` times out (`-110`) |
+| Wi-Fi | ✅ wcn36xx (WCNSS pronto + WCN3680 iris) |
+| Bluetooth | ✅ (WCNSS) |
+| Touch (ST FTS) | 🟡 chip responds, `stmfts` times out (`-110`, fts1ba90a) |
 | DSI panel (HX8279) | ⛔ deferred — simpledrm used instead |
 | Modem | disabled (Wi-Fi variant) |
-| Wi-Fi/BT, sensors, camera, audio, GPU | not started |
+| Sensors, camera, audio, GPU | not started |
 
 ## Layout
 
@@ -57,6 +59,10 @@ fastboot boot images/boot.img        # RAM boot (nothing is flashed)
 - **Touch:** i2c_1 (`78b5000`) uses gpio 2–3, so `gpio-reserved-ranges = <0 2>` (not daisy's
   `<0 4>`). Driver `CONFIG_TOUCHSCREEN_STMFTS`. The panel uses an ST fts1ba90a, which the
   mainline stmfts driver likely does not speak.
+- **Wi-Fi/BT:** WCNSS pronto + iris `qcom,wcn3680` (not `wcn3680b` — that compatible
+  doesn't exist). Needs the device NV blob at the `firmware-name` path
+  `qcom/msm8953/samsung/gta2xlwifi/WCNSS_qcom_wlan_nv.bin` (32K, from the stock
+  firmware) or wcn36xx fails with -2.
 - **Root UUIDs:** root `07d2abef-9505-4fc9-a6da-b6e69594ae30`,
   boot `1298aa1d-1977-4172-a50b-d7aead5d4569` (install on `mmcblk1p47`).
 - **Build hygiene:** do not run `make` against the kernel tree on the Arch host — host
@@ -67,5 +73,10 @@ fastboot boot images/boot.img        # RAM boot (nothing is flashed)
 
 - Touch: verify/adapt a driver for fts1ba90a.
 - DSI panel: ISL98608 i2c config, then `&mdss`/`&mdss_dsi0` instead of simpledrm.
-- GPU (Adreno 506, `a506_zap`), Wi-Fi/BT (`&wcnss`), sensors, audio, charger.
+- Package the Wi-Fi NV firmware so it survives a reinstall.
+- GPU (Adreno 506, `a506_zap`), sensors, audio, charger.
 - Spontaneous reboots (likely watchdog).
+
+## Upstream
+
+DTS submitted to msm8953-mainline/linux: PR #253.
