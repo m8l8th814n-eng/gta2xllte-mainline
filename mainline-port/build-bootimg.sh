@@ -15,7 +15,7 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PMOS="${PMOS:-$HOME/pmos}"
-DTS_NAME="msm8953-samsung-gta2xlwifi"
+DTS_NAME="sdm450-samsung-gta2xllte"
 OUT="$HERE/images/boot.img"
 
 # --- device-specifika värden (verifierade mot plattan) ---------------------

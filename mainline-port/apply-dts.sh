@@ -3,13 +3,13 @@
 # apply-dts.sh — applicera den redigerade dts:en i kärnträdet och verifiera.
 #
 # Arbetsflöde:
-#   1. redigera/spara:  mainline-port/msm8953-samsung-gta2xlwifi.dts   (DENNA är källan)
+#   1. redigera/spara:  mainline-port/sdm450-samsung-gta2xllte.dts   (DENNA är källan)
 #   2. kör:             ./apply-dts.sh
 #   3. bygg:            pmbootstrap build --src=<kärnträd> linux-postmarketos-qcom-msm8953
 #
 set -euo pipefail
 
-DTS_NAME="msm8953-samsung-gta2xlwifi"
+DTS_NAME="sdm450-samsung-gta2xllte"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CANONICAL="$HERE/$DTS_NAME.dts"
 KTREE="${1:-/home/simon/pmos/mainline-build/linux-7.0.9-r0}"

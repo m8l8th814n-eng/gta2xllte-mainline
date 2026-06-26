@@ -1,9 +1,12 @@
-# postmarketOS mainline — Samsung Galaxy Tab A 10.5 (2018, Wi-Fi)
+# postmarketOS mainline — Samsung Galaxy Tab A 10.5 (2018, LTE)
 
-Mainline port of **gta2xlwifi** (SoC Qualcomm SDM450 / MSM8953).
+Mainline port of **gta2xllte** (SM-T595), SoC Qualcomm SDM450.
 
 Base: pmOS device profile `qcom-msm8953` (systemd-edge), kernel
 `linux-postmarketos-qcom-msm8953` (msm8953-mainline/linux v7.0.9-r0), bootloader lk2nd.
+
+> The Wi-Fi-only sibling (SM-T590) is gta2xlwifi / SDA450; this port targets the
+> LTE model (SM-T595, SDM450, msm-id 338).
 
 ## Status
 
@@ -17,16 +20,17 @@ Base: pmOS device profile `qcom-msm8953` (systemd-edge), kernel
 | Bluetooth | ✅ (WCNSS) |
 | Touch (ST FTS) | 🟡 chip responds, `stmfts` times out (`-110`, fts1ba90a) |
 | DSI panel (HX8279) | ⛔ deferred — simpledrm used instead |
-| Modem | disabled (Wi-Fi variant) |
-| Sensors, camera, audio, GPU | not started |
+| Modem | not wired up yet |
+| Sensors, camera, audio, GPU, NFC | not started (NFC: hardware has none) |
 
 ## Layout
 
 ```
 mainline-port/
-├── msm8953-samsung-gta2xlwifi.dts   # device tree (the source)
+├── sdm450-samsung-gta2xllte.dts     # device tree (the source)
 ├── apply-dts.sh                     # copy dts → kernel tree + verify (out-of-tree)
 ├── build-bootimg.sh                 # build a RAM-bootable boot.img from the kernel apk
+├── upstream/                        # clean BSD-3-Clause dts as submitted upstream
 ├── pmaports-overlay/                # kernel config changes + diff
 ├── downstream-dts/                  # downstream Android dts (hardware reference)
 ├── templates/                       # mainline msm8953 dts (daisy, mido)
@@ -39,7 +43,7 @@ The kernel tree (`~/pmos/mainline-build/linux-7.0.9-r0`) lives outside this repo
 
 ```bash
 cd mainline-port
-# edit msm8953-samsung-gta2xlwifi.dts
+# edit sdm450-samsung-gta2xllte.dts
 ./apply-dts.sh                       # into the kernel tree + verify (always run before build)
 ./build-bootimg.sh                   # dts change → images/boot.img
 # config/kernel change: rebuild the kernel first:
@@ -51,8 +55,8 @@ fastboot boot images/boot.img        # RAM boot (nothing is flashed)
 
 - **PMIC:** pm8953 only (no pmi8950/pmi8937). Do not include `pmi8950.dtsi` — the SPMI
   probe fails with -EIO and blocks everything behind it.
-- **dtb selection:** lk2nd matches `qcom,msm-id = <0x152 0x0>` + `qcom,board-id = <0x08 0x04>`.
-  Without them the downstream dtb is loaded.
+- **dtb selection:** lk2nd matches `qcom,msm-id = <338 0>` (SDM450) + `qcom,board-id = <8 4>`
+  + the `T595*` bootloader string. Without them the downstream dtb is loaded.
 - **Display:** no mainline path lights the HX8279 (the ISL98608 has no i2c driver). Use
   simpledrm on the cont_splash framebuffer at `0x90001000`, msm DSI disabled, panel rails
   always-on. Format: 1200×1920, stride 1200×3, `r8g8b8` (24bpp) — 32bpp gives a sheared image.
@@ -61,7 +65,7 @@ fastboot boot images/boot.img        # RAM boot (nothing is flashed)
   mainline stmfts driver likely does not speak.
 - **Wi-Fi/BT:** WCNSS pronto + iris `qcom,wcn3680` (not `wcn3680b` — that compatible
   doesn't exist). Needs the device NV blob at the `firmware-name` path
-  `qcom/msm8953/samsung/gta2xlwifi/WCNSS_qcom_wlan_nv.bin` (32K, from the stock
+  `qcom/sdm450/samsung/gta2xllte/WCNSS_qcom_wlan_nv.bin` (32K, from the stock
   firmware) or wcn36xx fails with -2.
 - **Root UUIDs:** root `07d2abef-9505-4fc9-a6da-b6e69594ae30`,
   boot `1298aa1d-1977-4172-a50b-d7aead5d4569` (install on `mmcblk1p47`).
@@ -74,9 +78,10 @@ fastboot boot images/boot.img        # RAM boot (nothing is flashed)
 - Touch: verify/adapt a driver for fts1ba90a.
 - DSI panel: ISL98608 i2c config, then `&mdss`/`&mdss_dsi0` instead of simpledrm.
 - Package the Wi-Fi NV firmware so it survives a reinstall.
-- GPU (Adreno 506, `a506_zap`), sensors, audio, charger.
+- Modem (LTE), GPU (Adreno 506, `a506_zap`), sensors, audio, charger.
 - Spontaneous reboots (likely watchdog).
 
 ## Upstream
 
-DTS submitted to msm8953-mainline/linux: PR #253.
+- Kernel DTS: msm8953-mainline/linux PR #254 (`sdm450-samsung-gta2xllte`).
+- lk2nd: gta2xllte already supported upstream (T595*).

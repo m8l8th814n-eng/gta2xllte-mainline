@@ -10,15 +10,15 @@
 
 /dts-v1/;
 
-#include "msm8953.dtsi"
+#include "sdm450.dtsi"
 #include "pm8953.dtsi"
 /* No pmi8950/pmi8937 on this board — gta2 pairs pm8953 only (confirmed from
  * the live downstream fdt). Including a non-existent PMIC makes the SPMI probe
  * fail (-EIO) and blocks everything behind it. */
 
 / {
-	model = "Samsung Galaxy Tab A 10.5 (2018, Wi-Fi)";
-	compatible = "samsung,gta2xlwifi", "qcom,msm8953";
+	model = "Samsung Galaxy Tab A 10.5 (2018, LTE)";
+	compatible = "samsung,gta2xllte", "qcom,sdm450";
 	chassis-type = "tablet";
 
 	/*
@@ -341,6 +341,34 @@
  */
 &mpss {
 	status = "disabled";
+};
+
+/*
+ * Wi-Fi + Bluetooth: WCNSS pronto + iris RF (wcn3680b, dual-band 802.11ac).
+ * Supply rails verified against the device's live downstream fdt
+ * (vddxo/vdddig 1.8V, vddrfa 1.3V, vddpa 3.3V).
+ */
+&wcnss {
+	status = "okay";
+
+	vddpx-supply = <&pm8953_l5>;
+};
+
+&wcnss_iris {
+	compatible = "qcom,wcn3680";
+
+	vddxo-supply = <&pm8953_l7>;
+	vddrfa-supply = <&pm8953_l19>;
+	vddpa-supply = <&pm8953_l9>;
+	vdddig-supply = <&pm8953_l5>;
+};
+
+&wcnss_ctrl {
+	/*
+	 * NV calibration blob is device-specific; extract from the stock
+	 * /vendor (WCNSS_qcom_wlan_nv.bin) if Wi-Fi misbehaves.
+	 */
+	firmware-name = "qcom/msm8953/samsung/gta2xlwifi/WCNSS_qcom_wlan_nv.bin";
 };
 
 /*
