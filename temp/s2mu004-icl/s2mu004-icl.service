@@ -1,0 +1,16 @@
+[Unit]
+Description=Raise S2MU004 input current limit to 2500mA (no mainline driver yet)
+# gta2xllte has no mainline S2MU004 charger driver, so its input-current-limit
+# is stuck at the 500mA POR default. This sets CHG_CTRL2 (reg 0x12) to 0x62 =
+# 2500mA over the bit-banged i2c-gpio bus so the tablet can draw full current
+# from a wall charger. Finds the bus by name (number can change between boots).
+After=local-fs.target
+ConditionPathExistsGlob=/dev/i2c-*
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/sh -c 'b=$(i2cdetect -l | awk "/i2c-s2mu004/{print \$1}" | sed s/i2c-//); [ -n "$b" ] && i2cset -y "$b" 0x3d 0x12 0x62'
+
+[Install]
+WantedBy=multi-user.target

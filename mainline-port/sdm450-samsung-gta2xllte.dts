@@ -153,6 +153,23 @@
 		enable-active-high;
 		regulator-boot-on;
 	};
+
+	/*
+	 * Bit-banged i2c bus for the S2MU004 PMIC (charger + fuelgauge + MUIC),
+	 * downstream "sdm450-s2mu004.dtsi": sda=tlmm21, scl=tlmm20, MFD @ 0x3D.
+	 * No child node declared on purpose — there is no mainline S2MU004
+	 * driver yet, so leaving it bare lets userspace (i2c-dev/i2cset) poke
+	 * the charger registers directly, e.g. raise the input-current-limit
+	 * (CHG_CTRL2 reg 0x12) that mainline never configures.
+	 */
+	i2c_s2mu004: i2c-s2mu004 {
+		compatible = "i2c-gpio";
+		sda-gpios = <&tlmm 21 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+		scl-gpios = <&tlmm 20 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+		i2c-gpio,delay-us = <2>;	/* ~100 kHz */
+		#address-cells = <1>;
+		#size-cells = <0>;
+	};
 };
 
 &hsusb_phy {
