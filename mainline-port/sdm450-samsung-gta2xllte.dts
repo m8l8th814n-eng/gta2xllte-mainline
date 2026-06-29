@@ -29,37 +29,12 @@
 	qcom,msm-id = <0x152 0x0>;
 	qcom,board-id = <0x08 0x04>;
 
-	chosen {
-		#address-cells = <2>;
-		#size-cells = <2>;
-		ranges;
-
-		/*
-		 * Reuse lk2nd's continuous-splash framebuffer (panel already lit by
-		 * lk2nd). The real msm DSI display is kept disabled (see end of file)
-		 * so it doesn't reset the panel; simpledrm draws into this buffer.
-		 * The MDSS clocks are held on here so the MDP keeps scanning it out.
-		 */
-		framebuffer@90001000 {
-			compatible = "simple-framebuffer";
-			reg = <0 0x90001000 0 (1200 * 1920 * 3)>;
-
-			width = <1200>;
-			height = <1920>;
-			stride = <(1200 * 3)>;
-			format = "r8g8b8";
-
-			power-domains = <&gcc MDSS_GDSC>;
-
-			clocks = <&gcc GCC_MDSS_AHB_CLK>,
-				 <&gcc GCC_MDSS_AXI_CLK>,
-				 <&gcc GCC_MDSS_VSYNC_CLK>,
-				 <&gcc GCC_MDSS_MDP_CLK>,
-				 <&gcc GCC_MDSS_BYTE0_CLK>,
-				 <&gcc GCC_MDSS_PCLK0_CLK>,
-				 <&gcc GCC_MDSS_ESC0_CLK>;
-		};
-	};
+	/*
+	 * The real msm DSI display + HX8279 panel are enabled now (see end of
+	 * file). simpledrm on lk2nd's continuous-splash framebuffer is dropped:
+	 * the kernel drives the panel itself via mdss/dsi0, and the ISL98608
+	 * bias driver provides the panel VSP/VSN rails.
+	 */
 
 	/* Crash/console log preserved across reboot — read /sys/fs/pstore/ after a reset */
 	reserved-memory {
@@ -415,30 +390,45 @@
 };
 
 /*
- * Display: simpledrm on lk2nd's continuous-splash framebuffer
- * (chosen/framebuffer@90001000). The real msm DSI display + HX8279 panel are
- * kept DISABLED so the kernel never resets the already-lit panel. The panel
- * rails (panel_vsp_vsn / panel_vddr, both always-on) keep it powered.
- * TODO: finish the real DSI panel later (ISL98608 i2c VSP/VSN config + verify
- * the generated HX8279 init sequence), then re-enable mdss/dsi0 and drop simpledrm.
+ * Display: real msm DSI pipeline driving the Samsung HX8279 (TV101WUM,
+ * 1200x1920) panel. The panel's VSP/VSN bias comes from the ISL98608 on
+ * i2c_2 (&isl98608); VDDR (1.5V) stays asserted via panel_vddr.
  */
 &mdss {
-	status = "disabled";
+	status = "okay";
 };
 
 &mdss_dsi0 {
-	status = "disabled";
+	vdda-supply = <&pm8953_s3>;
+	vddio-supply = <&pm8953_l6>;
+	status = "okay";
+
+	panel@0 {
+		compatible = "samsung,gta2xl-hx8279-tv101wum";
+		reg = <0>;
+
+		reset-gpios = <&tlmm 50 GPIO_ACTIVE_LOW>;
+		vsp-supply = <&isl98608>;
+		vsn-supply = <&isl98608>;
+
+		port {
+			panel_in: endpoint {
+				remote-endpoint = <&mdss_dsi0_out>;
+			};
+		};
+	};
+
+	ports {
+		port@1 {
+			endpoint {
+				remote-endpoint = <&panel_in>;
+				data-lanes = <0 1 2 3>;
+			};
+		};
+	};
 };
 
 &mdss_dsi0_phy {
-	status = "disabled";
+	vcca-supply = <&pm8953_l3>;
+	status = "okay";
 };
-
-/*
- * TODO (next bring-up steps):
- *  - ISL98608 modelled as one enable-only fixed regulator. If the panel still
- *    won't light, a real isl98608 regulator driver + i2c node (0x29) may be
- *    needed to program VSP/VSN voltages (downstream also had vddr gpio 35).
- *  - Wi-Fi/BT: &wcnss (pronto) — enable once regulators/iris are mapped.
- *  - Sensors (i2c-gpio), vibrator, charger/fuel-gauge (s2mu004/s2mm005).
- */
