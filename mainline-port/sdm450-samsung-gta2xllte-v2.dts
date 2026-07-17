@@ -1,0 +1,454 @@
+// SPDX-License-Identifier: GPL-2.0-only
+/*
+ * Samsung Galaxy Tab A 10.5 (2018, Wi-Fi) — "gta2xlwifi"
+ * SoC: Qualcomm SDM450 / MSM8953 family
+ *
+ * Initial mainline device tree. Values ported from the downstream
+ * Android dts (arch/arm/boot/dts/samsung/sdm450/*gta2xlwifi*).
+ * Sections marked TODO still need verification on real hardware.
+ */
+
+/dts-v1/;
+
+#include "sdm450.dtsi"
+#include "pm8953.dtsi"
+#include "sdm450-samsung-gta2xllte-resmem.dtsi"
+/* No pmi8950/pmi8937 on this board — gta2 pairs pm8953 only (confirmed from
+ * the live downstream fdt). Including a non-existent PMIC makes the SPMI probe
+ * fail (-EIO) and blocks everything behind it. */
+
+/ {
+	model = "Samsung Galaxy Tab A 10.5 (2018, LTE)";
+	compatible = "samsung,gta2xllte", "qcom,sdm450";
+	chassis-type = "tablet";
+
+	/*
+	 * lk2nd selects this DT by matching the SoC/board IDs the bootloader
+	 * reports. Values read from the device's live downstream fdt
+	 * (/sys/firmware/fdt): SDM450, board-id 8/4 (LTE-class unit).
+	 */
+	qcom,msm-id = <0x152 0x0>;
+	qcom,board-id = <0x08 0x04>;
+
+	chosen {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+
+		/*
+		 * Reuse lk2nd's continuous-splash framebuffer (panel already lit by
+		 * lk2nd). The real msm DSI display is kept disabled (see end of file)
+		 * so it doesn't reset the panel; simpledrm draws into this buffer.
+		 * The MDSS clocks are held on here so the MDP keeps scanning it out.
+		 */
+		framebuffer@90001000 {
+			compatible = "simple-framebuffer";
+			reg = <0 0x90001000 0 (1200 * 1920 * 3)>;
+
+			width = <1200>;
+			height = <1920>;
+			stride = <(1200 * 3)>;
+			format = "r8g8b8";
+
+			power-domains = <&gcc MDSS_GDSC>;
+
+			clocks = <&gcc GCC_MDSS_AHB_CLK>,
+				 <&gcc GCC_MDSS_AXI_CLK>,
+				 <&gcc GCC_MDSS_VSYNC_CLK>,
+				 <&gcc GCC_MDSS_MDP_CLK>,
+				 <&gcc GCC_MDSS_BYTE0_CLK>,
+				 <&gcc GCC_MDSS_PCLK0_CLK>,
+				 <&gcc GCC_MDSS_ESC0_CLK>;
+		};
+	};
+
+	gpio-keys {
+		compatible = "gpio-keys";
+
+		pinctrl-names = "default";
+		pinctrl-0 = <&gpio_key_default>;
+
+		key-volume-up {
+			label = "Volume Up";
+			gpios = <&tlmm 85 GPIO_ACTIVE_LOW>;
+			linux,code = <KEY_VOLUMEUP>;
+		};
+		/* Volume Down and Power are handled by the PMIC (see &pm8953_resin
+		 * and the pm8953 pon below) */
+	};
+
+	vph_pwr: vph-pwr-regulator {
+		compatible = "regulator-fixed";
+		regulator-name = "vph_pwr";
+		regulator-always-on;
+		regulator-boot-on;
+	};
+
+	/*
+	 * Panel VDDR (1.5V) extra rail — downstream samsung,panel-extra-power-gpio1
+	 * on tlmm 35. The generated HX8279 driver doesn't request it, so assert it
+	 * always-on so the panel has power before/through init.
+	 */
+	panel_vddr: regulator-panel-vddr {
+		compatible = "regulator-fixed";
+		regulator-name = "panel_vddr";
+		gpio = <&tlmm 35 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+		regulator-always-on;
+		regulator-boot-on;
+	};
+
+	/*
+	 * Touchscreen power — downstream uses gpio-gated fixed regulators
+	 * (NOT pm8953 rails): tsp_avdd 3.3V on tlmm 139, tsp_dvdd 1.8V on tlmm 140.
+	 */
+	tsp_avdd: regulator-tsp-avdd {
+		compatible = "regulator-fixed";
+		regulator-name = "tsp_avdd";
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+		gpio = <&tlmm 139 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+		regulator-boot-on;
+	};
+
+	tsp_dvdd: regulator-tsp-dvdd {
+		compatible = "regulator-fixed";
+		regulator-name = "tsp_dvdd";
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <1800000>;
+		gpio = <&tlmm 140 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+		regulator-boot-on;
+	};
+
+	/*
+	 * Bit-banged i2c bus for the S2MU004 PMIC (charger + fuelgauge + MUIC),
+	 * downstream "sdm450-s2mu004.dtsi": sda=tlmm21, scl=tlmm20, MFD @ 0x3D.
+	 * No child node declared on purpose — there is no mainline S2MU004
+	 * driver yet, so leaving it bare lets userspace (i2c-dev/i2cset) poke
+	 * the charger registers directly, e.g. raise the input-current-limit
+	 * (CHG_CTRL2 reg 0x12) that mainline never configures.
+	 */
+	i2c_s2mu004: i2c-s2mu004 {
+		compatible = "i2c-gpio";
+		sda-gpios = <&tlmm 21 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+		scl-gpios = <&tlmm 20 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+		i2c-gpio,delay-us = <2>;	/* ~100 kHz */
+		#address-cells = <1>;
+		#size-cells = <0>;
+	};
+};
+
+&hsusb_phy {
+	vdd-supply = <&pm8953_l3>;
+	vdda-pll-supply = <&pm8953_l7>;
+	vdda-phy-dpdm-supply = <&pm8953_l13>;
+
+	status = "okay";
+};
+
+/* Touchscreen: STMicroelectronics FTS, i2c@78b5000, addr 0x49, IRQ on tlmm 59 */
+&i2c_1 {
+	status = "okay";
+
+	touchscreen@49 {
+		compatible = "st,fts1ba90a";
+		reg = <0x49>;
+
+		interrupt-parent = <&tlmm>;
+		interrupts = <59 IRQ_TYPE_LEVEL_LOW>;
+
+		vdd-supply = <&tsp_dvdd>;	/* 1.8V digital (tlmm 140) */
+		avdd-supply = <&tsp_avdd>;	/* 3.3V analog (tlmm 139) */
+
+		touchscreen-size-x = <1200>;
+		touchscreen-size-y = <1920>;
+	};
+};
+
+/* Volume Down */
+&pm8953_resin {
+	linux,code = <KEY_VOLUMEDOWN>;
+	status = "okay";
+};
+
+&rpm_requests {
+	regulators {
+		compatible = "qcom,rpm-pm8953-regulators";
+
+		vdd_s1-supply = <&vph_pwr>;
+		vdd_s2-supply = <&vph_pwr>;
+		vdd_s3-supply = <&vph_pwr>;
+		vdd_s4-supply = <&vph_pwr>;
+		vdd_s5-supply = <&vph_pwr>;
+		vdd_s6-supply = <&vph_pwr>;
+		vdd_s7-supply = <&vph_pwr>;
+		vdd_l1-supply = <&pm8953_s3>;
+		vdd_l2_l3-supply = <&pm8953_s3>;
+		vdd_l4_l5_l6_l7_l16_l19-supply = <&pm8953_s4>;
+		vdd_l8_l11_l12_l13_l14_l15-supply = <&vph_pwr>;
+		vdd_l9_l10_l17_l18_l22-supply = <&vph_pwr>;
+
+		pm8953_s1: s1 {
+			regulator-min-microvolt = <863000>;
+			regulator-max-microvolt = <1152000>;
+		};
+
+		pm8953_s3: s3 {
+			regulator-min-microvolt = <1224000>;
+			regulator-max-microvolt = <1224000>;
+		};
+
+		pm8953_s4: s4 {
+			regulator-min-microvolt = <1896000>;
+			regulator-max-microvolt = <2048000>;
+		};
+
+		pm8953_l1: l1 {
+			regulator-min-microvolt = <1000000>;
+			regulator-max-microvolt = <1100000>;
+		};
+
+		pm8953_l2: l2 {
+			regulator-min-microvolt = <975000>;
+			regulator-max-microvolt = <1225000>;
+		};
+
+		pm8953_l3: l3 {
+			regulator-min-microvolt = <925000>;
+			regulator-max-microvolt = <925000>;
+			regulator-allow-set-load;
+		};
+
+		pm8953_l5: l5 {
+			regulator-min-microvolt = <1800000>;
+			regulator-max-microvolt = <1800000>;
+		};
+
+		pm8953_l6: l6 {
+			regulator-min-microvolt = <1800000>;
+			regulator-max-microvolt = <1800000>;
+			regulator-always-on;
+		};
+
+		pm8953_l7: l7 {
+			regulator-min-microvolt = <1800000>;
+			regulator-max-microvolt = <1900000>;
+		};
+
+		pm8953_l8: l8 {
+			regulator-min-microvolt = <2900000>;
+			regulator-max-microvolt = <2900000>;
+		};
+
+		pm8953_l9: l9 {
+			regulator-min-microvolt = <3000000>;
+			regulator-max-microvolt = <3300000>;
+		};
+
+		pm8953_l10: l10 {
+			regulator-min-microvolt = <2850000>;
+			regulator-max-microvolt = <2850000>;
+			regulator-always-on;
+		};
+
+		pm8953_l11: l11 {
+			regulator-min-microvolt = <2950000>;
+			regulator-max-microvolt = <2950000>;
+		};
+
+		pm8953_l12: l12 {
+			regulator-min-microvolt = <1800000>;
+			regulator-max-microvolt = <2950000>;
+		};
+
+		pm8953_l13: l13 {
+			regulator-min-microvolt = <3125000>;
+			regulator-max-microvolt = <3125000>;
+		};
+
+		pm8953_l16: l16 {
+			regulator-min-microvolt = <1800000>;
+			regulator-max-microvolt = <1800000>;
+		};
+
+		pm8953_l17: l17 {
+			regulator-min-microvolt = <2850000>;
+			regulator-max-microvolt = <2850000>;
+		};
+
+		pm8953_l19: l19 {
+			regulator-min-microvolt = <1200000>;
+			regulator-max-microvolt = <1350000>;
+		};
+
+		pm8953_l22: l22 {
+			regulator-min-microvolt = <2800000>;
+			regulator-max-microvolt = <2850000>;
+			regulator-always-on;
+		};
+
+		pm8953_l23: l23 {
+			regulator-min-microvolt = <975000>;
+			regulator-max-microvolt = <1225000>;
+		};
+	};
+};
+
+/* eMMC */
+&sdhc_1 {
+	vmmc-supply = <&pm8953_l8>;
+	vqmmc-supply = <&pm8953_l5>;
+
+	status = "okay";
+};
+
+/* microSD */
+&sdhc_2 {
+	vmmc-supply = <&pm8953_l11>;
+	vqmmc-supply = <&pm8953_l12>;
+
+	/* TODO: confirm card-detect GPIO for this board */
+	cd-gpios = <&tlmm 133 GPIO_ACTIVE_LOW>;
+
+	pinctrl-names = "default", "sleep";
+	pinctrl-0 = <&sdc2_clk_on &sdc2_cmd_on &sdc2_data_on &sdc2_cd_on>;
+	pinctrl-1 = <&sdc2_clk_off &sdc2_cmd_off &sdc2_data_off &sdc2_cd_off>;
+
+	status = "okay";
+};
+
+&tlmm {
+	gpio-reserved-ranges = <0 2>, <16 4>, <135 4>;
+};
+
+/* Serial console (via lk2nd) */
+&uart_0 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart_console_active>;
+
+	status = "okay";
+};
+
+&usb3 {
+	/* Node already defaults to peripheral via role-switch-default-mode */
+	status = "okay";
+};
+
+/*
+ * Wi-Fi only tablet — no cellular modem present.
+ * Keep the modem remoteproc disabled.
+ */
+&mpss {
+	status = "disabled";
+};
+
+/*
+ * Wi-Fi + Bluetooth: WCNSS pronto + iris RF (wcn3680b, dual-band 802.11ac).
+ * Supply rails verified against the device's live downstream fdt
+ * (vddxo/vdddig 1.8V, vddrfa 1.3V, vddpa 3.3V).
+ */
+&wcnss {
+	status = "okay";
+
+	vddpx-supply = <&pm8953_l5>;
+};
+
+&wcnss_iris {
+	compatible = "qcom,wcn3680";
+
+	vddxo-supply = <&pm8953_l7>;
+	vddrfa-supply = <&pm8953_l19>;
+	vddpa-supply = <&pm8953_l9>;
+	vdddig-supply = <&pm8953_l5>;
+};
+
+&wcnss_ctrl {
+	/*
+	 * NV calibration blob is device-specific; extract from the stock
+	 * /vendor (WCNSS_qcom_wlan_nv.bin) if Wi-Fi misbehaves.
+	 */
+	firmware-name = "qcom/msm8953/samsung/gta2xlwifi/WCNSS_qcom_wlan_nv.bin";
+};
+
+/*
+ * Panel bias IC: Intersil ISL98608 on i2c_2 @ 0x29, enable on tlmm 134.
+ * Programmed over i2c at enable (VBST/VN/VP = 5.8 V) by isl98608-regulator.
+ * Kept always-on for now so it holds lk2nd's already-lit panel powered while
+ * simpledrm is active; the real DSI panel will consume it as vsp/vsn-supply.
+ */
+&i2c_2 {
+	status = "okay";
+
+	isl98608: regulator@29 {
+		compatible = "isil,isl98608";
+		reg = <0x29>;
+		enable-gpios = <&tlmm 134 GPIO_ACTIVE_HIGH>;
+		regulator-name = "panel_vsp_vsn";
+		regulator-min-microvolt = <5800000>;
+		regulator-max-microvolt = <5800000>;
+		regulator-always-on;
+		regulator-boot-on;
+	};
+};
+
+/*
+ * Display: simpledrm on lk2nd's continuous-splash framebuffer
+ * (chosen/framebuffer@90001000). The real msm DSI display + HX8279 panel are
+ * kept DISABLED so the kernel never resets the already-lit panel. The panel
+ * rails (panel_vsp_vsn / panel_vddr, both always-on) keep it powered.
+ * TODO: finish the real DSI panel later (ISL98608 i2c VSP/VSN config + verify
+ * the generated HX8279 init sequence), then re-enable mdss/dsi0 and drop simpledrm.
+ */
+&mdss {
+	status = "disabled";
+};
+
+&mdss_dsi0 {
+	status = "disabled";
+};
+
+&mdss_dsi0_phy {
+	status = "disabled";
+};
+
+
+/*
+ * Haptics: single GPIO-gated ERM motor. Ported from downstream
+ * "msm_vibrator" (motor-vdd_type=0 => gpio, motor-en = tlmm 128, active high).
+ * Mainline gpio-vibrator driver (drivers/input/misc/gpio-vibra.c) drives it as
+ * an input FF_RUMBLE device — feedbackd/phosh haptics will use it.
+ */
+/ {
+	vibrator {
+		compatible = "gpio-vibrator";
+		enable-gpios = <&tlmm 128 GPIO_ACTIVE_HIGH>;
+
+		pinctrl-names = "default";
+		pinctrl-0 = <&vibrator_default>;
+	};
+};
+
+&tlmm {
+	vibrator_default: vibrator-default-state {
+		pins = "gpio128";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-disable;
+	};
+};
+
+/*
+ * GPU frequency cap for stability. The inherited gpu_opp_table (msm8953.dtsi +
+ * sdm450.dtsi) tops out at 600 MHz @ turbo. Under phosh's sustained GPU load
+ * that turbo corner triggers a hard, log-less reset on this tablet (Hyprland,
+ * which stays lower, is fine). Drop the two highest OPPs so the ceiling becomes
+ * 510 MHz @ nom — downstream's practical everyday max. Corners are unchanged
+ * (they were already correct), we only remove the top steps.
+ * If phosh still resets, also /delete-node/ opp-510000000 (ceiling -> 400 @ svs+).
+ */
+&gpu_opp_table {
+	/delete-node/ opp-600000000;
+	/delete-node/ opp-560000000;
+};
