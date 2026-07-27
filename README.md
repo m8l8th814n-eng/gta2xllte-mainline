@@ -3,6 +3,7 @@
 I have stopped trying get this device into mainline. but I have another repo with patches for this device that seems to work a lot better.
 It has msmdrm instead of simpledrm as this repo has.
 I only made it to learn more about qualcomms.
+https://github.com/m8l8th814n-eng/gta2xllte-gta2xlwifi-msmdrm-Samsung-Galaxy-Tab-A-2018-
 
 
 Mainline port of **gta2xllte** (SM-T595), SoC Qualcomm SDM450.
